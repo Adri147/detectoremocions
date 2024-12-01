@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detección de Emociones</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden; /* Evita desplazamiento */
+            font-family: Arial, sans-serif;
+        }
+    
+        /* Contenedor de fondo */
+        .fons {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, #cb4611, #f09d77);
+            z-index: -1; /* Coloca el fondo detrás del contenido */
+        }
+    
+        /* Contenedor de toda la página */
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            height: 100vh; /* Asegura que ocupe toda la pantalla */
+            color: #ffffff;
+            text-align: center;
+        }
+    
+        /* Contenido principal centrado */
+        .principal {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+        }
+    
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+    
+        #webcam {
+            border: 5px solid #ffffff;
+            border-radius: 10px;
+            box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.2);
+            margin-bottom: 15px;
+            width: 256px;
+            height: 192px;
+        }
+    
+        #emotion {
+            font-size: 1.5em;
+            background-color: rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.2);
+            margin-bottom: 10px;
+        }
+    
+        /* Estilo del footer */
+        footer {
+            padding: 15px;
+            text-align: center;
+            color: #ffffff;
+            background-color: rgba(0, 0, 0, 0.2);
+            width: 100%;
+        }
+    
+        footer p {
+            margin: 5px 0;
+            font-size: 1em;
+        }
+    
+        footer img {
+            width: 100px;
+            height: auto;
+            margin-top: 5px;
+        }
+    </style>
+    
+<body>
+    <div class="fons"></div>
+    
+    <div class="container">
+        <div class="principal">
+            <h1>DETECCIÓ D'EMOCIÓNS</h1>
+            <video id="webcam" autoplay playsinline></video>
+            <p id="emocio">Emoció detectada: ...</p>
+        </div>
+
+        <footer>
+            <p>Projecte desenvolupat per:<br>Izan Díaz i Adrián Fernández</p>
+            <img src="logo_ies_torre_del_palau.gif" alt="Logo IES Torre del Palau">
+        </footer>
+    </div>
+</body>
+<script>
+    let model;
+    const video = document.getElementById("webcam");
+    const textEmocions = document.getElementById("emocio");
+
+    // Llista d'emocións
+    const emocio = ["Enuig", "Fastic", "Por", "Felicitat", "Tristesa", "Sorpresa", "Neutral"];
+
+    async function loadModel() {
+        // Carregar el model
+        model = await tf.loadLayersModel('/models/model_v6/model.json');
+        console.log("Model carregat");
+    }
+
+    async function iniciarCamera() {
+        return new Promise((resolve, reject) => {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then((stream) => {
+                    video.srcObject = stream;
+                    video.addEventListener("loadeddata", () => resolve(), false);
+                })
+                .catch((error) => reject(error));
+        });
+    }
+
+    async function predirEmocio() {
+        if (!model) return;
+
+        const img = tf.browser.fromPixels(video)
+            .resizeNearestNeighbor([256, 256])
+            .toFloat()
+            .div(tf.scalar(255.0)) // Normalitzar
+            .expandDims();
+
+        const prediccio = model.predict(img);
+        const valorsPrediccio = prediccio.dataSync();
+        img.dispose(); // Lliberar memoria
+
+        // Calcular el percentatge de cada emoció
+        const emotionPercentages = Array.from(valorsPrediccio).map(value => (value * 100).toFixed(1));
+
+        let maxIndex = 0;
+        let maxPercentage = parseFloat(emotionPercentages[0]);
+        for (let i = 1; i < emotionPercentages.length; i++) {
+            if (parseFloat(emotionPercentages[i]) > maxPercentage) {
+                maxPercentage = parseFloat(emotionPercentages[i]);
+                maxIndex = i;
+            }
+        }
+
+        // Mostrar els percentatges de cada emoció
+        textEmocions.innerHTML = `Emocions detectades:<br>
+            Enuig: ${emotionPercentages[0]}%<br>
+            Fàstic: ${emotionPercentages[1]}%<br>
+            Por: ${emotionPercentages[2]}%<br>
+            Felicitat: ${emotionPercentages[3]}%<br>
+            Tristesa: ${emotionPercentages[4]}%<br>
+            Sorpresa: ${emotionPercentages[5]}%<br>
+            Neutral: ${emotionPercentages[6]}%<br>
+            <strong>Emoción principal: ${emocio[maxIndex]} (${maxPercentage}%)</strong>`;
+
+        prediccio.dispose(); // Lliberar memoria de la predicció
+    }
+
+
+    // Iniciar l'aplicació
+    (async () => {
+        await loadModel();
+        await iniciarCamera();
+
+        setInterval(predirEmocio, 500);
+    })();
+</script>
+</body>
+</html>
